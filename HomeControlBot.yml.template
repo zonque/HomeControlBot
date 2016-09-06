@@ -1,0 +1,5 @@
+ping_hosts: [ ]
+telegram_token: ""
+telegram_allowed: [ ]
+monitor_dirs: [ ]
+
