@@ -9,7 +9,7 @@ require 'net/ping'
 include Net
 
 config = YAML.load(File.read("HomeControlBot.yml"))
-pingHosts = config["ping_hosts"].map { |h| Net::Ping::ICMP.new(h) } rescue []
+pingHosts = config["ping_hosts"].map { |h| Net::Ping::ICMP.new(h, nil, 2) } rescue []
 chats = IO.readlines("HomeControlBot.chatids").map { |s| s.to_i } rescue []
 
 def countFiles(dir)
