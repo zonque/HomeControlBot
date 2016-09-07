@@ -9,8 +9,11 @@ require 'net/ping'
 include Net
 
 config = YAML.load(File.read("HomeControlBot.yml"))
-pingHosts = config["ping_hosts"].map { |h| Net::Ping::ICMP.new(h, nil, 2) } rescue []
 chats = IO.readlines("HomeControlBot.chatids").map { |s| s.to_i } rescue []
+
+pingStatus = {}
+pingHosts = config["ping_hosts"]
+pingHosts.each { |ph| pingStatus[ph] = false }
 
 def countFiles(dir)
   d = Dir.new(dir)
@@ -19,6 +22,12 @@ def countFiles(dir)
 
   count
 end
+
+monitorDirs = config["monitor_dirs"].map do |dir|
+  { dir: dir, count: countFiles(dir) }
+end
+
+broadcasts = Queue.new
 
 def writeChatIDs(chats)
   chats.uniq!
@@ -38,11 +47,34 @@ def stopMotion
   system("systemctl stop motion")
 end
 
-monitorDirs = config["monitor_dirs"].map do |dir|
-  { dir: dir, count: countFiles(dir) }
-end
+$started = false
+$timeout = 0
 
-broadcasts = Queue.new
+def checkPings
+  any = false
+
+  pingStatus.each do |ph, status|
+    any = true if status == true
+  end
+
+  if any
+    $timeout = 0
+  else
+    $timeout += 1
+  end
+
+  if $timeout > 3 && !$started
+    broadcasts.push("Hey, have your mobiles all left the flat? Enabling the camera now!")
+    startMotion
+    $started = true
+  end
+
+  if $timeout == 0 && $started
+    broadcasts.push("Ah, there you are! Camera is off again, no worries!")
+    stopMotion
+    $started = false
+  end
+end
 
 Telegram::Bot::Client.run(config["telegram_token"]) do |bot|
   threads = []
@@ -59,36 +91,15 @@ Telegram::Bot::Client.run(config["telegram_token"]) do |bot|
     end
   end
 
-  threads << Thread.new do
-    timeout = 0
-    started = false
+  pingHosts.each do |ph|
+    threads << Thread.new do
+      p = Net::Ping::ICMP.new(ph, nil, 2)
 
-    loop do
-      any = false
-
-      pingHosts.each do |h|
-        any = true if h.ping?
+      loop do
+        pingStatus[ph] = p.ping?
+        checkPings
+        sleep pingStatus[ph] ? 10 : 1
       end
-
-      if any
-        timeout = 0
-      else
-        timeout += 1
-      end
-
-      if timeout > 3 && !started
-        broadcasts.push("Hey, have your mobiles all left the flat? Enabling the camera now!")
-        startMotion
-        started = true
-      end
-
-      if timeout == 0 && started
-        broadcasts.push("Ah, there you are! Camera is off again, no worries!")
-        stopMotion
-        started = false
-      end
-
-      sleep any ? 10 : 1
     end
   end
 
@@ -135,6 +146,10 @@ Telegram::Bot::Client.run(config["telegram_token"]) do |bot|
       bot.api.send_message(chat_id: message.chat.id, text: s)
     when '/mount'
       bot.api.send_message(chat_id: message.chat.id, text: `mount`)
+    when '/pingstatus'
+      s = "Ping status:\n"
+      pingStatus.each { |ph, status| s += "#{ph} is #{status ? 'up' : 'down'}\n" }
+      bot.api.send_message(chat_id: message.chat.id, text: s)
     end
   end
 
