@@ -76,7 +76,7 @@ Telegram::Bot::Client.run(config["telegram_token"]) do |bot|
         timeout += 1
       end
 
-      if timeout > 5 && !started
+      if timeout > 3 && !started
         broadcasts.push("Hey, have your mobiles all left the flat? Enabling the camera now!")
         startMotion
         started = true
@@ -88,7 +88,7 @@ Telegram::Bot::Client.run(config["telegram_token"]) do |bot|
         started = false
       end
 
-      sleep 5
+      sleep any ? 10 : 1
     end
   end
 
