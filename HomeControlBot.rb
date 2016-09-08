@@ -6,6 +6,7 @@ require 'yaml'
 require 'telegram/bot'
 require 'thread'
 require 'net/ping'
+require 'awesome_print'
 
 include Net
 
@@ -22,12 +23,13 @@ class HomeControlBot
     @pingHosts = @config["ping_hosts"]
     @pingHosts.each { |ph| @pingStatus[ph] = false }
 
+    @stickers = @config["stickers"] || {}
+
     @monitorDirs = @config["monitor_dirs"].map do |dir|
       { dir: dir, count: countFiles(dir) }
     end
 
     @broadcasts = Queue.new
-
     @motionStarted = false
     @pingTimeout = 0
   end
@@ -91,14 +93,14 @@ class HomeControlBot
   def timerThread(bot, message, duration, text)
     bot.api.send_message(chat_id: message.chat.id, text: "Ok, will call you back in #{duration} seconds (#{duration / 60}:#{duration % 60} minutes)")
 
-    t = Thread.new(bot, message, duration, text) do |b, m, d, t|
+    thread = Thread.new(bot, message, duration, text) do |b, m, d, t|
       sleep duration
       s = "Hey #{m.from.first_name}! #{d} seconds are over!"
       s += " ('#{t}')" unless t.nil? or t.empty?
       b.api.send_message(chat_id: message.chat.id, text: s)
     end
 
-    t
+    thread
   end
 
   def run
@@ -152,41 +154,50 @@ class HomeControlBot
       bot.listen do |message|
         unless @config["telegram_allowed"].include? message.from.id
           bot.api.send_message(chat_id: message.chat.id, text: "Huh. Who are you? I'm not talking to strangers.")
-          return
+          next
         end
 
-        args = message.text.split(' ')
+        next unless message and message.text
 
-        case args[0]
-        when '/start'
-          chats << message.chat.id
-          writeChatIDs(chats)
+        args = message.text.split(' ')
+        cmd = args[0][1..-1]
+
+        if @stickers.keys.include? cmd
+          sticker = @stickers[cmd].shuffle.first
+          bot.api.send_sticker(chat_id: message.chat.id, sticker: sticker)
+          next
+        end
+
+        case cmd
+        when 'start'
+          @chats << message.chat.id
+          writeChatIDs
           bot.api.send_message(chat_id: message.chat.id, text: "Hello, #{message.from.first_name}")
-        when '/stop'
-          chats.delete(message.chat.id)
-          writeChatIDs(chats)
+        when 'stop'
+          @chats.delete(message.chat.id)
+          writeChatIDs
           bot.api.send_message(chat_id: message.chat.id, text: "Bye, #{message.from.first_name}")
-        when '/hello'
+        when 'hello'
           bot.api.send_message(chat_id: message.chat.id, text: "I'm alive and kicking, #{message.from.first_name}")
-        when '/motionstatus'
+        when 'motionstatus'
           s = [
             `systemctl status motion`,
             `uptime`
           ].join("\n").force_encoding("utf-8")
 
           bot.api.send_message(chat_id: message.chat.id, text: s)
-        when '/mount'
+        when 'mount'
           bot.api.send_message(chat_id: message.chat.id, text: `mount`)
-        when '/pingstatus'
+        when 'pingstatus'
           s = "Ping status:\n"
           @pingStatus.each { |ph, status| s += "#{ph} is #{status ? 'up' : 'down'}\n" }
           s += "Timeout = #{@pingTimeout}"
           bot.api.send_message(chat_id: message.chat.id, text: s)
-        when '/timer'
+        when 'timer'
           break unless args[1]
           duration = args[1].to_i rescue 0
           threads << timerThread(bot, message, duration, args[2])
-        when '/egg'
+        when 'egg'
           threads << timerThread(bot, message, 270, "Egg")
         end
       end
