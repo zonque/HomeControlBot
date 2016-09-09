@@ -10,6 +10,14 @@ require 'awesome_print'
 
 include Net
 
+class Array
+  def sum(&block)
+    i = 0
+    each { |e| i += yield(e) }
+    i
+  end
+end
+
 class HomeControlBot
 
   def initialize()
@@ -32,6 +40,16 @@ class HomeControlBot
     @broadcasts = Queue.new
     @motionStarted = false
     @pingTimeout = 0
+  end
+
+  def parseTime(s)
+    return 0 unless s
+
+    factors = [ 1, 60, 60 * 60, 60 * 60 * 24 ].reverse
+    a = s.split(':').map(&:to_i).reverse
+    return 0 if a.length > factors.length
+
+    a.sum { |v| v * factors.pop }
   end
 
   def broadcast(msg)
@@ -149,7 +167,7 @@ class HomeControlBot
         end
       end
 
-      puts "Started. Listening for messages."
+      puts "Started. Waiting for messages."
 
       bot.listen do |message|
         unless @config["telegram_allowed"].include? message.from.id
@@ -195,7 +213,7 @@ class HomeControlBot
           bot.api.send_message(chat_id: message.chat.id, text: s)
         when 'timer'
           break unless args[1]
-          duration = args[1].to_i rescue 0
+          duration = parseTime(args[1])
           threads << timerThread(bot, message, duration, args[2])
         when 'egg'
           threads << timerThread(bot, message, 270, "Egg")
