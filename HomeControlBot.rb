@@ -6,7 +6,8 @@ require 'yaml'
 require 'telegram/bot'
 require 'thread'
 require 'net/ping'
-require 'awesome_print'
+
+EMOJI_CAMERA = "\u{1F4F7}"
 
 include Net
 
@@ -143,13 +144,13 @@ class HomeControlBot
           end
 
           if pingTimeout > @config["ping_timeout"] && !motionStarted
-            broadcast("Hey, have your mobiles all left the flat? Enabling the camera now!")
+            broadcast("Ping timeout. #{EMOJI_CAMERA} on!")
             startMotion
             motionStarted = true
           end
 
           if pingTimeout == 0 && motionStarted
-            broadcast("Ah, there you are! Camera is off again, no worries!")
+            broadcast("#{EMOJI_CAMERA} off")
             stopMotion
             motionStarted = false
           end
@@ -177,7 +178,7 @@ class HomeControlBot
 
       bot.listen do |message|
         unless @config["telegram_allowed"].include? message.from.id
-          bot.api.send_message(chat_id: message.chat.id, text: "Huh. Who are you? I'm not talking to strangers.")
+          bot.api.send_message(chat_id: message.chat.id, text: "Huh. Who are you? I'm not talking to strangers, number #{message.from.id}.")
           next
         end
 
