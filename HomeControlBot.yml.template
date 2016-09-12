@@ -1,4 +1,5 @@
 ping_hosts: [ ]
+ping_timeout: 5
 telegram_token: ""
 telegram_allowed: [ ]
 monitor_dirs: [ ]

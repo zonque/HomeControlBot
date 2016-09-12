@@ -95,7 +95,7 @@ class HomeControlBot
       @pingTimeout += 1
     end
 
-    if @pingTimeout > 3 && !@motionStarted
+    if @pingTimeout > @config["ping_timeout"] && !@motionStarted
       broadcast("Hey, have your mobiles all left the flat? Enabling the camera now!")
       startMotion
       @motionStarted = true
