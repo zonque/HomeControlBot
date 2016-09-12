@@ -39,6 +39,7 @@ class HomeControlBot
     end
 
     @broadcasts = Queue.new
+    @pingTimeout = 0
   end
 
   def parseTime(s)
@@ -125,7 +126,6 @@ class HomeControlBot
       end
 
       threads << Thread.new do
-        pingTimeout = 0
         motionStarted = false
 
         loop do
@@ -138,18 +138,18 @@ class HomeControlBot
           end
 
           if any
-            pingTimeout = 0
+            @pingTimeout = 0
           else
-            pingTimeout += 1
+            @pingTimeout += 1
           end
 
-          if pingTimeout > @config["ping_timeout"] && !motionStarted
+          if @pingTimeout > @config["ping_timeout"] && !motionStarted
             broadcast("Ping timeout. #{EMOJI_CAMERA} on!")
             startMotion
             motionStarted = true
           end
 
-          if pingTimeout == 0 && motionStarted
+          if @pingTimeout == 0 && motionStarted
             broadcast("#{EMOJI_CAMERA} off")
             stopMotion
             motionStarted = false
