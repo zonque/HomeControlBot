@@ -38,8 +38,6 @@ class HomeControlBot
     end
 
     @broadcasts = Queue.new
-    @motionStarted = false
-    @pingTimeout = 0
   end
 
   def parseTime(s)
@@ -82,32 +80,6 @@ class HomeControlBot
     system("systemctl stop motion")
   end
 
-  def checkPings
-    any = false
-
-    @pingStatus.each do |ph, status|
-      any = true if status == true
-    end
-
-    if any
-      @pingTimeout = 0
-    else
-      @pingTimeout += 1
-    end
-
-    if @pingTimeout > @config["ping_timeout"] && !@motionStarted
-      broadcast("Hey, have your mobiles all left the flat? Enabling the camera now!")
-      startMotion
-      @motionStarted = true
-    end
-
-    if @pingTimeout == 0 && @motionStarted
-      broadcast("Ah, there you are! Camera is off again, no worries!")
-      stopMotion
-      @motionStarted = false
-    end
-  end
-
   def timerThread(bot, message, duration, text)
     bot.api.send_message(chat_id: message.chat.id, text: "Ok, will call you back in #{duration} seconds (#{duration / 60}:#{duration % 60} minutes)")
 
@@ -145,10 +117,44 @@ class HomeControlBot
           loop do
             @mutex.synchronize do
               @pingStatus[ph] = p.ping?
-              checkPings
             end
             sleep @pingStatus[ph] ? 10 : 1
           end
+        end
+      end
+
+      threads << Thread.new do
+        pingTimeout = 0
+        motionStarted = false
+
+        loop do
+          any = false
+
+          @mutex.synchronize do
+            @pingStatus.each do |ph, status|
+              any = true if status == true
+            end
+          end
+
+          if any
+            pingTimeout = 0
+          else
+            pingTimeout += 1
+          end
+
+          if pingTimeout > @config["ping_timeout"] && !motionStarted
+            broadcast("Hey, have your mobiles all left the flat? Enabling the camera now!")
+            startMotion
+            motionStarted = true
+          end
+
+          if pingTimeout == 0 && motionStarted
+            broadcast("Ah, there you are! Camera is off again, no worries!")
+            stopMotion
+            motionStarted = false
+          end
+
+          sleep 1
         end
       end
 
