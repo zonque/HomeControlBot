@@ -7,17 +7,9 @@ require 'telegram/bot'
 require 'thread'
 require 'net/ping'
 
-EMOJI_CAMERA = "\u{1F4F7}"
-
 include Net
 
-class Array
-  def sum(&block)
-    i = 0
-    each { |e| i += yield(e) }
-    i
-  end
-end
+EMOJI_CAMERA = "\u{1F4F7}"
 
 class HomeControlBot
 
@@ -45,11 +37,11 @@ class HomeControlBot
   def parseTime(s)
     return 0 unless s
 
-    factors = [ 1, 60, 60 * 60, 60 * 60 * 24 ].reverse
-    a = s.split(':').map(&:to_i).reverse
+    factors = [ 1, 60, 60 * 60, 60 * 60 * 24 ]
+    a = s.split(':').map(&:to_i)
     return 0 if a.length > factors.length
 
-    a.sum { |v| v * factors.pop }
+    a.inject { |sum, n| sum + (n * factors.pop) }
   end
 
   def broadcast(msg)
@@ -57,11 +49,7 @@ class HomeControlBot
   end
 
   def countFiles(dir)
-    d = Dir.new(dir)
-    count = 0
-    d.each { |f| count += 1 }
-
-    count
+    Dir.new(dir).count
   end
 
   def writeChatIDs
@@ -129,18 +117,12 @@ class HomeControlBot
         motionStarted = false
 
         loop do
-          any = false
-
           @mutex.synchronize do
-            @pingStatus.each do |ph, status|
-              any = true if status == true
+            if @pingStatus.any?
+              @pingTimeout = 0
+            else
+              @pingTimeout += 1
             end
-          end
-
-          if any
-            @pingTimeout = 0
-          else
-            @pingTimeout += 1
           end
 
           if @pingTimeout > @config["ping_timeout"] && !motionStarted
