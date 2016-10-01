@@ -27,7 +27,7 @@ class HomeControlBot
     @stickers = @config["stickers"] || {}
 
     @monitorDirs = @config["monitor_dirs"].map do |dir|
-      { dir: dir, count: countFiles(dir) }
+      { dir: dir, files: Dir.glob("#{dir}/*") }
     end
 
     @broadcasts = Queue.new
@@ -45,11 +45,11 @@ class HomeControlBot
   end
 
   def broadcast(msg)
-    @broadcasts.push(msg)
+    @broadcasts.push({ message: msg, type: :message })
   end
 
-  def countFiles(dir)
-    Dir.new(dir).count
+  def broadcast_video(video)
+    @broadcasts.push({ video: video, type: :video })
   end
 
   def writeChatIDs
@@ -94,7 +94,12 @@ class HomeControlBot
 
           @mutex.synchronize do
             @chats.uniq.each do |chat|
-              bot.api.send_message(chat_id: chat, text: msg)
+              case msg[:type]
+              when :message
+                bot.api.send_message(chat_id: chat, text: msg[:message])
+              when :video
+                bot.api.send_video(chat_id: chat, video: Faraday::UploadIO.new(msg[:video], 'video/mp4'))
+              end
             end
           end
         end
@@ -118,7 +123,7 @@ class HomeControlBot
 
         loop do
           @mutex.synchronize do
-            if @pingStatus.any?
+            if @pingStatus.values.any?
               @pingTimeout = 0
             else
               @pingTimeout += 1
@@ -144,12 +149,19 @@ class HomeControlBot
       threads << Thread.new do
         loop do
           @monitorDirs.each do |d|
-            count = countFiles(d[:dir])
-            if count != d[:count]
-              broadcast("Alert: #{count - d[:count]} new file(s) in #{d[:dir]}. Go check.")
-            end
+            files = Dir.glob("#{d[:dir]}/*")
+            new_files = files - d[:files]
+            d[:files] = files
 
-            d[:count] = count
+            if new_files.any?
+              broadcast("Alert: #{new_files.count} new file(s) in #{d[:dir]}. Go check.")
+
+              new_files.each do |nf|
+                next unless /\.avi$/.match(nf)
+                #puts "Broadcasting #{nf}"
+                broadcast_video(nf)
+              end
+            end
           end
 
           sleep 60
