@@ -7,31 +7,9 @@ require 'telegram/bot'
 require 'thread'
 require 'net/ping'
 require 'socket'
+require 'color'
 
 include Net
-
-class CycleChannel
-  def initialize(step, start = 0, min = 0, max = 256)
-    @step, @val, @min, @max = step, start, min, max
-    @dir = 1.0
-  end
-
-  def next
-    @val += @step * @dir
-
-    if (@val > @max) then
-      @val = 2 * @max - @val
-      @dir = -1.0
-    end
-
-    if (@val < @min) then
-      @val *= -1.0
-      @dir = 1.0
-    end
-
-    @val.to_i
-  end
-end
 
 EMOJI_CAMERA = "\u{1F4F7}"
 
@@ -167,7 +145,7 @@ class HomeControlBot
 
           if @pingTimeout == 0 && motionStarted
             s = "#{EMOJI_CAMERA} off. "
-            if prevLightMode and (Time.now.hour > 18 or Time.now.hour < 6)
+            if prevLightMode
               @lightMode = prevLightMode
               s += "Lights back to #{prevLightMode}."
             end
@@ -204,14 +182,11 @@ class HomeControlBot
       end
 
       threads << Thread.new do
-        cycleR = CycleChannel.new(0.1)
-        cycleG = CycleChannel.new(0.2)
-        cycleB = CycleChannel.new(0.3)
-        cycleW = CycleChannel.new(0.4)
-
         socket = UDPSocket.new
         payload = Array.new(513, 0)
         strobeState = 0
+        cycleDegree = 0
+        hsl = Color::HSL.new(0, 100, 50)
 
         fixColors = {
           off:    { r: 0,   g: 0,   b: 0,   w: 0   },
@@ -221,6 +196,7 @@ class HomeControlBot
           yellow: { r: 255, g: 255, b: 0,   w: 0   },
           orange: { r: 255, g: 127, b: 0,   w: 10  },
           pink:   { r: 255, g: 0,   b: 255, w: 0   },
+          white:  { r: 255, g: 255, b: 255, w: 255 },
         }
 
         loop do
@@ -232,13 +208,30 @@ class HomeControlBot
             delay = 1
 
           when 'cycle'
-            payload[4] = 255
-            payload[5] = cycleR.next
-            payload[6] = cycleG.next
-            payload[7] = cycleB.next
-            payload[8] = 0 #cycleW.next
+            cycleDegree += 0.5
+            cycleDegree %= 360
+            hsl.hue = cycleDegree
 
-            delay = 0.02
+            payload[4] = 255
+            payload[5] = hsl.to_rgb.r * 255
+            payload[6] = hsl.to_rgb.g * 255
+            payload[7] = hsl.to_rgb.b * 255
+            payload[8] = 0
+
+            delay = 1
+
+          when 'clock'
+            clockDegree = 670 - (((Time.now.hour * 60) + Time.now.min) * 360 / (24 * 60))
+            clockDegree %= 360
+            hsl.hue = clockDegree
+
+            payload[4] = 255
+            payload[5] = hsl.to_rgb.r * 255
+            payload[6] = hsl.to_rgb.g * 255
+            payload[7] = hsl.to_rgb.b * 255
+            payload[8] = 0
+
+            delay = 1
 
           when 'strobe'
             strobeState ^= 1
